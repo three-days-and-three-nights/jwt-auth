@@ -8,16 +8,24 @@ use thans\jwt\provider\JWT\Provider;
 
 class Manager
 {
+    protected $provider;
+
+    protected $blacklist;
+
+    protected $payload;
+
     protected $refresh;
 
     protected $validate = true;
 
     public function __construct(
-        protected  Blacklist $blacklist,
-        protected  Payload $payload,
+        Blacklist $blacklist,
+        Payload $payload,
         Provider $provider
     ) {
-        $this->provider  = $provider;
+        $this->blacklist = $blacklist;
+        $this->payload = $payload;
+        $this->provider = $provider;
     }
 
     /**
@@ -30,7 +38,7 @@ class Manager
     public function encode($customerClaim = [])
     {
         $payload = $this->payload->customer($customerClaim);
-        $token   = $this->provider->encode($payload->get());
+        $token = $this->provider->encode($payload->get());
 
         return new Token($token);
     }
@@ -40,13 +48,12 @@ class Manager
      *
      * @param  Token  $token
      *
-     * @return Payload
+     * @return mixed
      * @throws TokenBlacklistException
      */
     public function decode(Token $token)
     {
         $payload = $this->provider->decode($token->get());
-
         if ($this->validate) {
             //blacklist grace period verify
             if ($this->validateGracePeriod($payload)) {
@@ -58,8 +65,10 @@ class Manager
                 throw new TokenBlacklistException('The token is in blacklist.');
             }
         }
-        return  $this->payload->customer($payload)->check($this->refresh);
 
+        $this->payload->customer($payload)->check($this->refresh);
+
+        return $payload;
     }
 
     /**
@@ -73,11 +82,13 @@ class Manager
     public function refresh(Token $token)
     {
         $this->setRefresh();
-        $payload = $this->decode($token)->get();
+
+        $payload = $this->decode($token);
 
         $this->invalidate($token);
 
-        $this->payload->customer($payload)->check(true);
+        $this->payload->customer($payload)
+            ->check(true);
 
         return $this->encode($payload);
     }
@@ -114,7 +125,7 @@ class Manager
 
     public function setRefresh($refresh = true)
     {
-        $this->refresh = $refresh;
+        $this->refresh = true;
 
         return $this;
     }
